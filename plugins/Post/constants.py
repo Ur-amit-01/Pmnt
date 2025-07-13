@@ -85,7 +85,7 @@ ABOUT_TXT = """
 ├➢ ʙᴜɪʟᴅ ꜱᴛᴀᴛᴜꜱ  : ᴘʏᴛʜᴏɴ v3.6.8
 ╰───────────────⍟
 
-➢ ɴᴏᴛᴇ :- Interested Owners can DM @xDzoddd for personal bot. 🤝🏻
+➢ >ᴅᴇᴠᴇʟᴏᴘᴇʀ 🧑🏻‍💻 :- @xDzoddd (DM for personal bot. 🤝🏻)
 </b>"""
 
 RESTRICTED_TXT = """
