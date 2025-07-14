@@ -99,12 +99,13 @@ class Database:
         )
 
     # ============ Channel System ============ #
-    async def add_channel(self, channel_id, channel_name=None):
+    async def add_channel(self, channel_id, channel_name=None, group_number=0):
         channel_id = int(channel_id)
-        if not await self.is_channel_exist(channel_id):
+        if not await self.is_channel_exist(channel_id, group_number):
             await self.channels.insert_one({
                 "_id": channel_id, 
                 "name": channel_name,
+                "group": group_number,
                 "added_date": datetime.now(),
                 "post_count": 0,
                 "last_post": None
@@ -112,14 +113,20 @@ class Database:
             return True
         return False
 
-    async def delete_channel(self, channel_id):
-        await self.channels.delete_one({"_id": int(channel_id)})
+    async def delete_channel(self, channel_id, group_number=0):
+        await self.channels.delete_one({"_id": int(channel_id), "group": group_number})
 
-    async def is_channel_exist(self, channel_id):
-        return await self.channels.find_one({"_id": int(channel_id)}) is not None
+    async def is_channel_exist(self, channel_id, group_number=0):
+        return await self.channels.find_one({"_id": int(channel_id), "group": group_number}) is not None
 
-    async def get_all_channels(self):
-        return [channel async for channel in self.channels.find({})]
+    async def get_all_channels(self, group_number=None):
+        if group_number is not None:
+            return [channel async for channel in self.channels.find({"group": group_number})]
+        else:
+            return [channel async for channel in self.channels.find({})]
+
+    async def get_channels_by_group(self, group_number):
+        return await self.get_all_channels(group_number)
 
     async def increment_channel_post(self, channel_id):
         await self.channels.update_one(
@@ -194,8 +201,16 @@ class Database:
             await self.log_error(f"Error retrieving posts: {e}")
             return []
 
-    # ============ admin panel Methods ===========
+    # ============ Error Logging ============ #
+    async def log_error(self, error_message: str):
+        """Log errors to the database"""
+        try:
+            await self.logs.insert_one({
+                "timestamp": datetime.now(),
+                "error": error_message
+            })
+        except Exception as e:
+            print(f"Failed to log error: {e}")
 
-            
- #Initialize the database
+#Initialize the database
 db = Database(DB_URL, DB_NAME)
