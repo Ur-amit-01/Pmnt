@@ -97,7 +97,6 @@ class Database:
             {"$set": {"last_active": datetime.now()}}
         )
 
-    # ============ Channel System ============ 
     # ============ Post System ============ #
     async def save_post(self, post_data):
         post_data["timestamp"] = datetime.now()
@@ -164,12 +163,19 @@ class Database:
 
     # ============ admin panel Methods ===========
 
-    # ============ Channel System (Modified for Group Support) ============ #
+    # ============ Updated Channel System ============ #
     async def add_channel(self, channel_id, channel_name=None, group_number=0):
-        channel_id = int(channel_id)
-        if not await self.is_channel_exist(channel_id, group_number):
+        """Add channel to a specific group (can exist in multiple groups)"""
+        try:
+            channel_id = int(channel_id)
+            channel_name = channel_name or f"Channel_{channel_id}"
+            
+            # Check if already exists in this group
+            if await self.is_channel_in_group(channel_id, group_number):
+                return False
+
             await self.channels.insert_one({
-                "_id": channel_id, 
+                "channel_id": channel_id,
                 "name": channel_name,
                 "group": group_number,
                 "added_date": datetime.now(),
@@ -177,37 +183,74 @@ class Database:
                 "last_post": None
             })
             return True
-        return False
+        except Exception as e:
+            await self.log_error(f"Error adding channel: {e}")
+            return False
 
-    async def delete_channel(self, channel_id, group_number=0):
-        await self.channels.delete_one({
-            "_id": int(channel_id),
-            "group": group_number
-        })
+    async def delete_channel(self, channel_id, group_number=None):
+        """Delete channel from specific group or all groups"""
+        try:
+            query = {"channel_id": int(channel_id)}
+            if group_number is not None:
+                query["group"] = group_number
+                
+            result = await self.channels.delete_many(query)
+            return result.deleted_count > 0
+        except Exception as e:
+            await self.log_error(f"Error deleting channel: {e}")
+            return False
 
-    async def is_channel_exist(self, channel_id, group_number=0):
-        return await self.channels.find_one({
-            "_id": int(channel_id),
-            "group": group_number
-        }) is not None
+    async def is_channel_exist(self, channel_id):
+        """Check if channel exists in any group"""
+        try:
+            return await self.channels.count_documents({"channel_id": int(channel_id)}) > 0
+        except Exception as e:
+            await self.log_error(f"Error checking channel existence: {e}")
+            return False
+
+    async def is_channel_in_group(self, channel_id, group_number):
+        """Check if channel exists in specific group"""
+        try:
+            return await self.channels.count_documents({
+                "channel_id": int(channel_id),
+                "group": group_number
+            }) > 0
+        except Exception as e:
+            await self.log_error(f"Error checking channel group: {e}")
+            return False
 
     async def get_all_channels(self, group_number=None):
-        query = {} if group_number is None else {"group": group_number}
-        return [channel async for channel in self.channels.find(query).sort("added_date", 1)]
+        """Get all channels or filter by group"""
+        try:
+            query = {} if group_number is None else {"group": group_number}
+            return [channel async for channel in self.channels.find(query).sort("added_date", 1)]
+        except Exception as e:
+            await self.log_error(f"Error getting channels: {e}")
+            return []
 
-    async def get_channels_by_group(self, group_number):
-        return await self.get_all_channels(group_number)
+    async def get_channel_groups(self, channel_id):
+        """Get all groups a channel belongs to"""
+        try:
+            return await self.channels.distinct("group", {"channel_id": int(channel_id)})
+        except Exception as e:
+            await self.log_error(f"Error getting channel groups: {e}")
+            return []
 
     async def increment_channel_post(self, channel_id):
-        await self.channels.update_one(
-            {"_id": int(channel_id)},
-            {
-                "$inc": {"post_count": 1},
-                "$set": {"last_post": datetime.now()}
-            }
-        )
+        """Increment post count for all instances of this channel"""
+        try:
+            await self.channels.update_many(
+                {"channel_id": int(channel_id)},
+                {
+                    "$inc": {"post_count": 1},
+                    "$set": {"last_post": datetime.now()}
+                }
+            )
+            return True
+        except Exception as e:
+            await self.log_error(f"Error incrementing post count: {e}")
+            return False
 
-
-#Initialize the database
+ 
+# Initialize the database
 db = Database(DB_URL, DB_NAME)
-        
