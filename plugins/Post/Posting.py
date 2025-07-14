@@ -48,7 +48,7 @@ async def restore_pending_deletions(client):
     except Exception as e:
         print(f"Error restoring pending deletions: {e}")
 
-@Client.on_message(filters.command("post") & filters.private & admin_filter)
+@Client.on_message(filters.command(["post", "post1", "post2", "post3"]) & filters.private & admin_filter)
 async def send_post(client, message: Message):
     try:
         await message.react(emoji=random.choice(REACTIONS), big=True)
@@ -62,11 +62,52 @@ async def send_post(client, message: Message):
         await message.reply("**Reply to a message to post it.**")
         return
 
+    # Determine which group(s) to post to based on command
+    command = message.command[0].lower()
+    group_numbers = []
+    
+    if command == "post":
+        group_numbers = [0]  # Default group
+    elif command == "post1":
+        group_numbers = [1]
+    elif command == "post2":
+        group_numbers = [2]
+    elif command == "post3":
+        group_numbers = [3]
+    
+    # Also support numeric arguments like /post 1 2
+    if len(message.command) > 1 and command == "post":
+        try:
+            group_numbers = []
+            for arg in message.command[1:]:
+                if arg.isdigit():
+                    group_num = int(arg)
+                    if 0 <= group_num <= 3:
+                        group_numbers.append(group_num)
+                    else:
+                        await message.reply("❌ Group numbers must be between 0-3")
+                        return
+                else:
+                    break  # Stop at first non-numeric argument (could be time spec)
+            
+            # If no valid group numbers found, default to group 0
+            if not group_numbers:
+                group_numbers = [0]
+        except:
+            group_numbers = [0]
+
     delete_after = None
     time_input = None
-    if len(message.command) > 1:
+    
+    # Parse time if provided (skip group numbers)
+    time_args = []
+    for arg in message.command[1:]:
+        if not arg.isdigit() or int(arg) > 3:  # Not a group number
+            time_args.append(arg)
+    
+    if time_args:
         try:
-            time_input = ' '.join(message.command[1:]).lower()
+            time_input = ' '.join(time_args).lower()
             delete_after = parse_time(time_input)
             if delete_after <= 0:
                 await message.reply("❌ Time must be greater than 0")
@@ -76,10 +117,16 @@ async def send_post(client, message: Message):
             return
 
     post_content = message.reply_to_message
-    channels = await db.get_all_channels()
+    channels = []
+    
+    # Get channels from all specified groups
+    for group_num in group_numbers:
+        group_channels = await db.get_channels_by_group(group_num)
+        channels.extend(group_channels)
 
     if not channels:
-        await message.reply("**No channels connected yet.**")
+        group_names = ", ".join(str(g) for g in group_numbers)
+        await message.reply(f"**No channels connected in group(s) {group_names} yet.**")
         return
 
     post_id = int(time.time())
@@ -89,7 +136,7 @@ async def send_post(client, message: Message):
     failed_channels = []
 
     processing_msg = await message.reply(
-        f"**📢 Posting to {total_channels} channels...**",
+        f"**📢 Posting to {total_channels} channels in group(s) {', '.join(str(g) for g in group_numbers)}...**",
         reply_to_message_id=post_content.id
     )
 
@@ -106,7 +153,8 @@ async def send_post(client, message: Message):
             sent_messages.append({
                 "channel_id": channel["_id"],
                 "message_id": sent_message.id,
-                "channel_name": channel.get("name", str(channel["_id"]))
+                "channel_name": channel.get("name", str(channel["_id"])),
+                "group": channel.get("group", 0)
             })
             success_count += 1
 
@@ -130,7 +178,8 @@ async def send_post(client, message: Message):
             failed_channels.append({
                 "channel_id": channel["_id"],
                 "channel_name": channel.get("name", str(channel["_id"])),
-                "error": error_msg
+                "error": error_msg,
+                "group": channel.get("group", 0)
             })
 
     # Save post with deletion info if needed
@@ -139,7 +188,8 @@ async def send_post(client, message: Message):
         "channels": sent_messages,
         "user_id": message.from_user.id,
         "confirmation_msg_id": processing_msg.id,
-        "created_at": time.time()
+        "created_at": time.time(),
+        "groups": group_numbers
     }
     
     if delete_after:
@@ -151,6 +201,7 @@ async def send_post(client, message: Message):
     result_msg = (
         f"<blockquote>📣 <b>Posting Completed!</b></blockquote>\n\n"
         f"• <b>Post ID:</b> <code>{post_id}</code>\n"
+        f"• <b>Groups:</b> {', '.join(str(g) for g in group_numbers)}\n"
         f"• <b>Success:</b> {success_count}/{total_channels} channels\n"
     )
     
@@ -163,7 +214,7 @@ async def send_post(client, message: Message):
         if len(failed_channels) <= 10:
             result_msg += "<b>Failed Channels:</b>\n"
             for idx, channel in enumerate(failed_channels, 1):
-                result_msg += f"{idx}. {channel['channel_name']} - {channel['error']}\n"
+                result_msg += f"{idx}. {channel['channel_name']} (Group {channel['group']}) - {channel['error']}\n"
         else:
             result_msg += "<i>Too many failed channels to display (see logs for details)</i>\n"
 
@@ -178,14 +229,15 @@ async def send_post(client, message: Message):
             f"📢 <blockquote><b>#Post | @Interferons_bot</b></blockquote>\n\n"
             f"👤 <b>Posted By:</b> {message.from_user.mention}\n"
             f"📌 <b>Post ID:</b> <code>{post_id}</code>\n"
+            f"📡 <b>Groups:</b> {', '.join(str(g) for g in group_numbers)}\n"
             f"📡 <b>Sent to:</b> {success_count}/{total_channels} channels\n"
             f"⏳ <b>Auto-delete:</b> {time_str if delete_after else 'No'}\n"
         )
         
         if failed_channels:
             log_msg += f"\n❌ <b>Failed Channels ({len(failed_channels)}):</b>\n"
-            for channel in failed_channels[:15]:  # Show up to 15 in logs
-                log_msg += f"  - {channel['channel_name']}: {channel['error']}\n"
+            for channel in failed_channels[:15]:
+                log_msg += f"  - {channel['channel_name']} (Group {channel['group']}): {channel['error']}\n"
             if len(failed_channels) > 15:
                 log_msg += f"  ...and {len(failed_channels)-15} more"
         
@@ -206,99 +258,7 @@ async def send_post(client, message: Message):
             )
         )
 
-async def schedule_deletion(client, channel_id, message_id, delay_seconds, user_id, post_id, channel_name, confirmation_msg_id):
-    """Schedule a message for deletion after a delay"""
-    await asyncio.sleep(delay_seconds)
-    
-    try:
-        await client.delete_messages(
-            chat_id=channel_id,
-            message_ids=message_id
-        )
-        
-        await db.remove_channel_post(post_id, channel_id)
-        
-        return {
-            "status": "success",
-            "channel_name": channel_name,
-            "post_id": post_id,
-            "user_id": user_id,
-            "confirmation_msg_id": confirmation_msg_id
-        }
-        
-    except Exception as e:
-        return {
-            "status": "failed",
-            "channel_name": channel_name,
-            "post_id": post_id,
-            "error": str(e),
-            "user_id": user_id,
-            "confirmation_msg_id": confirmation_msg_id
-        }
-
-async def handle_deletion_results(client, deletion_tasks, post_id, delay_seconds):
-    """Handle the results of all deletion tasks"""
-    try:
-        results = await asyncio.gather(*deletion_tasks, return_exceptions=True)
-        
-        success_count = 0
-        failed_count = 0
-        user_id = None
-        confirmation_msg_id = None
-        failed_deletions = []
-        
-        for result in results:
-            if isinstance(result, Exception):
-                failed_count += 1
-                continue
-                
-            if user_id is None and result.get("user_id"):
-                user_id = result["user_id"]
-                confirmation_msg_id = result.get("confirmation_msg_id")
-            
-            if result.get("status") == "success":
-                success_count += 1
-            else:
-                failed_count += 1
-                failed_deletions.append(result)
-        
-        if user_id:
-            if success_count > 0 and confirmation_msg_id:
-                try:
-                    await client.delete_messages(
-                        chat_id=user_id,
-                        message_ids=confirmation_msg_id
-                    )
-                except:
-                    pass
-            
-            message_text = (
-                f"<blockquote>🗑 <b>Post Auto-Deleted</b></blockquote>\n\n"
-                f"• <b>Post ID:</b> <code>{post_id}</code>\n"
-                f"• <b>Deleted from:</b> {success_count} channel(s)\n"
-            )
-            
-            if failed_deletions:
-                message_text += f"• <b>Failed to delete from:</b> {failed_count} channel(s)\n"
-                if len(failed_deletions) <= 5:
-                    message_text += "\n<b>Failed Channels:</b>\n"
-                    for idx, fail in enumerate(failed_deletions, 1):
-                        message_text += f"{idx}. {fail['channel_name']} - {fail.get('error', 'Unknown error')}\n"
-            
-            try:
-                await client.send_message(user_id, message_text)
-            except:
-                pass
-
-        if success_count > 0:
-            remaining_channels = await db.get_post_channels(post_id)
-            if not remaining_channels:
-                await db.delete_post(post_id)
-                
-    except Exception as e:
-        print(f"Error in handle_deletion_results: {e}")
-
-@Client.on_message(filters.command("fpost") & filters.private & admin_filter)
+@Client.on_message(filters.command(["fpost", "fpost1", "fpost2", "fpost3"]) & filters.private & admin_filter)
 async def forward_post(client, message: Message):
     try:
         await message.react(emoji=random.choice(REACTIONS), big=True)
@@ -309,11 +269,52 @@ async def forward_post(client, message: Message):
         await message.reply("**Reply to a message to forward it.**")
         return
 
+    # Determine which group(s) to post to based on command
+    command = message.command[0].lower()
+    group_numbers = []
+    
+    if command == "fpost":
+        group_numbers = [0]  # Default group
+    elif command == "fpost1":
+        group_numbers = [1]
+    elif command == "fpost2":
+        group_numbers = [2]
+    elif command == "fpost3":
+        group_numbers = [3]
+    
+    # Also support numeric arguments like /fpost 1 2
+    if len(message.command) > 1 and command == "fpost":
+        try:
+            group_numbers = []
+            for arg in message.command[1:]:
+                if arg.isdigit():
+                    group_num = int(arg)
+                    if 0 <= group_num <= 3:
+                        group_numbers.append(group_num)
+                    else:
+                        await message.reply("❌ Group numbers must be between 0-3")
+                        return
+                else:
+                    break  # Stop at first non-numeric argument (could be time spec)
+            
+            # If no valid group numbers found, default to group 0
+            if not group_numbers:
+                group_numbers = [0]
+        except:
+            group_numbers = [0]
+
     delete_after = None
     time_input = None
-    if len(message.command) > 1:
+    
+    # Parse time if provided (skip group numbers)
+    time_args = []
+    for arg in message.command[1:]:
+        if not arg.isdigit() or int(arg) > 3:  # Not a group number
+            time_args.append(arg)
+    
+    if time_args:
         try:
-            time_input = ' '.join(message.command[1:]).lower()
+            time_input = ' '.join(time_args).lower()
             delete_after = parse_time(time_input)
             if delete_after <= 0:
                 await message.reply("❌ Time must be greater than 0")
@@ -323,10 +324,16 @@ async def forward_post(client, message: Message):
             return
 
     post_content = message.reply_to_message
-    channels = await db.get_all_channels()
+    channels = []
+    
+    # Get channels from all specified groups
+    for group_num in group_numbers:
+        group_channels = await db.get_channels_by_group(group_num)
+        channels.extend(group_channels)
 
     if not channels:
-        await message.reply("**No channels connected yet.**")
+        group_names = ", ".join(str(g) for g in group_numbers)
+        await message.reply(f"**No channels connected in group(s) {group_names} yet.**")
         return
 
     post_id = int(time.time())
@@ -336,7 +343,7 @@ async def forward_post(client, message: Message):
     failed_channels = []
 
     processing_msg = await message.reply(
-        f"**📢 Forwarding to {total_channels} channels...**",
+        f"**📢 Forwarding to {total_channels} channels in group(s) {', '.join(str(g) for g in group_numbers)}...**",
         reply_to_message_id=post_content.id
     )
 
@@ -353,7 +360,8 @@ async def forward_post(client, message: Message):
             sent_messages.append({
                 "channel_id": channel["_id"],
                 "message_id": sent_message.id,
-                "channel_name": channel.get("name", str(channel["_id"]))
+                "channel_name": channel.get("name", str(channel["_id"])),
+                "group": channel.get("group", 0)
             })
             success_count += 1
 
@@ -377,7 +385,8 @@ async def forward_post(client, message: Message):
             failed_channels.append({
                 "channel_id": channel["_id"],
                 "channel_name": channel.get("name", str(channel["_id"])),
-                "error": error_msg
+                "error": error_msg,
+                "group": channel.get("group", 0)
             })
 
     post_data = {
@@ -386,7 +395,8 @@ async def forward_post(client, message: Message):
         "user_id": message.from_user.id,
         "confirmation_msg_id": processing_msg.id,
         "created_at": time.time(),
-        "is_forward": True
+        "is_forward": True,
+        "groups": group_numbers
     }
     
     if delete_after:
@@ -398,6 +408,7 @@ async def forward_post(client, message: Message):
     result_msg = (
         f"<blockquote>📣 <b>Forwarding Completed!</b></blockquote>\n\n"
         f"• <b>Post ID:</b> <code>{post_id}</code>\n"
+        f"• <b>Groups:</b> {', '.join(str(g) for g in group_numbers)}\n"
         f"• <b>Success:</b> {success_count}/{total_channels} channels\n"
     )
     
@@ -410,7 +421,7 @@ async def forward_post(client, message: Message):
         if len(failed_channels) <= 10:
             result_msg += "<b>Failed Channels:</b>\n"
             for idx, channel in enumerate(failed_channels, 1):
-                result_msg += f"{idx}. {channel['channel_name']} - {channel['error']}\n"
+                result_msg += f"{idx}. {channel['channel_name']} (Group {channel['group']}) - {channel['error']}\n"
         else:
             result_msg += "<i>Too many failed channels to display (see logs for details)</i>\n"
 
@@ -425,6 +436,7 @@ async def forward_post(client, message: Message):
             f"📢 <blockquote><b>#FPost | @Interferons_bot</b></blockquote>\n\n"
             f"👤 <b>Forwarded By:</b> {message.from_user.mention}\n"
             f"📌 <b>Post ID:</b> <code>{post_id}</code>\n"
+            f"📡 <b>Groups:</b> {', '.join(str(g) for g in group_numbers)}\n"
             f"📡 <b>Sent to:</b> {success_count}/{total_channels} channels\n"
             f"⏳ <b>Auto-delete:</b> {time_str if delete_after else 'No'}\n"
         )
@@ -432,7 +444,7 @@ async def forward_post(client, message: Message):
         if failed_channels:
             log_msg += f"\n❌ <b>Failed Channels ({len(failed_channels)}):</b>\n"
             for channel in failed_channels[:15]:
-                log_msg += f"  - {channel['channel_name']}: {channel['error']}\n"
+                log_msg += f"  - {channel['channel_name']} (Group {channel['group']}): {channel['error']}\n"
             if len(failed_channels) > 15:
                 log_msg += f"  ...and {len(failed_channels)-15} more"
         
@@ -451,4 +463,4 @@ async def forward_post(client, message: Message):
                 post_id=post_id,
                 delay_seconds=delete_after
             )
-	)
+		) 
