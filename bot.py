@@ -36,16 +36,18 @@ class Bot(Client):
         logging.info(f"{me.first_name} ✅✅ BOT started successfully ✅✅")
         logging.info(f"{me.first_name} Pending deletions restored successfully.")
 
-        # Notify admins
-        for admin_id in ADMIN:
-            try:
-                await self.send_message(
-                    admin_id,
-                    "**Missed me ??**\n"
-                    "**I’m baaack online ~ 🎀🌝**")
-                
-            except Exception as e:
-                logging.warning(f"Failed to send restart notification to {admin_id}: {e}")
+        # Notify admins if enabled in config
+        if SEND_RESTART_NOTIFICATION:
+            for admin_id in ADMIN_IDS:
+                try:
+                    await self.send_message(
+                        admin_id,
+                        "**Missed me ??**\n"
+                        "**I'm baaack online ~ 🎀🌝**")
+                except Exception as e:
+                    logging.warning(f"Failed to send restart notification to {admin_id}: {e}")
+        else:
+            logging.info("Restart notifications are disabled in config")
 
     async def stop(self, *args):
         await super().stop()
