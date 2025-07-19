@@ -5,9 +5,6 @@ from pyrogram import Client
 from config import *
 from plugins.Post.Posting import restore_pending_deletions
 
-# Support multiple admin IDs
-ADMIN_IDS = [int(x) for x in os.environ.get("AMIT", "2031106491").split()]
-
 logging.config.fileConfig('logging.conf')
 logging.getLogger().setLevel(logging.INFO)
 logging.getLogger("pyrogram").setLevel(logging.ERROR)
@@ -37,8 +34,8 @@ class Bot(Client):
         logging.info(f"{me.first_name} Pending deletions restored successfully.")
 
         # Notify admins if enabled in config
-        if SEND_RESTART_NOTIFICATION:
-            for admin_id in ADMIN_IDS:
+        if RESTART_NOTIFICATION:
+            for admin_id in ADMIN:
                 try:
                     await self.send_message(
                         admin_id,
