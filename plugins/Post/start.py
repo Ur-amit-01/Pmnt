@@ -304,7 +304,7 @@ async def id_command(client: Client, message: Message):
 
 # =====================================================================================
 # Set bot commands
-@Client.on_message(filters.command("set") & admin_filter)
+@Client.on_message(filters.command("set"))
 async def set_commands(client: Client, message: Message):
     await client.set_bot_commands([
         BotCommand("start", "Start bot"),
