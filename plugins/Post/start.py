@@ -3,7 +3,7 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQ
 from config import *
 from plugins.helper.db import db
 import random
-from plugins.Post.admin_panel import admin_filter
+
 
 # =====================================================================================
 
