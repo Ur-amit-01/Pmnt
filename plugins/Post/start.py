@@ -188,7 +188,7 @@ async def main_menu(client: Client, callback_query: CallbackQuery):
 
 # =====================================================================================
 # Set bot commands
-@Client.on_message(filters.command("set") & admin_filter)
+@Client.on_message(filters.command("set"))
 async def set_commands(client: Client, message: Message):
     await client.set_bot_commands([
         BotCommand("start", "🤖 ꜱᴛᴀʀᴛ ᴍᴇ"),
