@@ -3,7 +3,6 @@ import logging
 import logging.config
 from pyrogram import Client
 from config import *
-from plugins.Post.Posting import restore_pending_deletions
 
 logging.config.fileConfig('logging.conf')
 logging.getLogger().setLevel(logging.INFO)
@@ -52,3 +51,4 @@ class Bot(Client):
 
 bot = Bot()
 bot.run()
+
