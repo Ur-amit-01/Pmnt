@@ -27,10 +27,9 @@ class Bot(Client):
         self.mention = me.mention
         self.username = me.username
 
-        await restore_pending_deletions(self)
 
         logging.info(f"{me.first_name} ✅✅ BOT started successfully ✅✅")
-        logging.info(f"{me.first_name} Pending deletions restored successfully.")
+        logging.info(f"Let's Gooooo Darling 😚")
 
         # Notify admins if enabled in config
         if RESTART_NOTIFICATION:
@@ -51,4 +50,5 @@ class Bot(Client):
 
 bot = Bot()
 bot.run()
+
 
