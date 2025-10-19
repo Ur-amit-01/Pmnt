@@ -4,7 +4,7 @@ from config import *
 from plugins.helper.db import db
 import random
 
-# Store payment requests temporarily (in production, use database)
+# Store payment requests temporarily
 payment_requests = {}
 
 # =====================================================================================
@@ -22,19 +22,19 @@ async def start(client, message: Message):
         total_users = await db.total_users_count()
         await client.send_message(LOG_CHANNEL, LOG_TEXT.format(message.from_user.mention, message.from_user.id, total_users))
 
-    # Simple welcome message
+    # Clean welcome message
     txt = (
         f"👋 **Hey {message.from_user.mention}!**\n\n"
-        "**Get 150k+ Premium Reels Bundle** 🎬\n\n"
-        "• Ready-to-use templates\n"
-        "• All categories included\n"
-        "• Instant delivery\n\n"
-        "**Only ₹199** 💰"
+        "**150k+ Premium Reels Bundle** 🎬\n\n"
+        "• All Categories Included\n"
+        "• Instant Delivery\n"
+        "• Only ₹199\n\n"
+        "Click **Buy Now** to get started!"
     )
     
     button = InlineKeyboardMarkup([
         [InlineKeyboardButton('💳 Buy Now - ₹199', callback_data='pay')],
-        [InlineKeyboardButton('❓ How it works', callback_data='help')]
+        [InlineKeyboardButton('❓ Help', callback_data='help')]
     ])
 
     if START_PIC:
@@ -54,45 +54,45 @@ async def pay_callback(client: Client, callback_query: CallbackQuery):
 
 
 async def send_payment(client, update):
-    """Simple payment message"""
+    """Clean payment message"""
     payment_text = (
-        "**💳 Payment - ₹199**\n\n"
-        "**150k+ Reels Bundle**\n\n"
-        "1. Pay ₹199 using QR code\n"
-        "2. Click 'I Paid' and send screenshot\n"
-        "3. Get instant access after verification\n\n"
+        "**💳 Get Your Reels Bundle**\n\n"
+        "**Price:** ₹199\n\n"
+        "**Steps:**\n"
+        "1. Click **'I Paid'** below\n"
+        "2. Send payment screenshot\n"
+        "3. Get instant access\n\n"
         "Need help? Contact @alphaeditorssquad"
     )
     
     buttons = InlineKeyboardMarkup([
         [InlineKeyboardButton("✅ I Paid", callback_data="paid")],
-        [InlineKeyboardButton("📞 Support", url="https://t.me/alphaeditorssquad")],
+        [InlineKeyboardButton("❓ Help", callback_data="help")],
         [InlineKeyboardButton("🔙 Back", callback_data="back")]
     ])
     
     try:
         if isinstance(update, CallbackQuery):
-            await update.message.delete()
-            await update.message.reply_photo("payment.jpg", caption=payment_text, reply_markup=buttons)
+            await update.message.edit_text(payment_text, reply_markup=buttons)
         else:
-            await update.reply_photo("payment.jpg", caption=payment_text, reply_markup=buttons)
+            await update.reply_text(payment_text, reply_markup=buttons)
     except:
-        # If no QR image
         if isinstance(update, CallbackQuery):
-            await update.message.edit_text(payment_text + "\n\n⚠️ QR code missing, contact support", reply_markup=buttons)
+            await update.message.edit_text(payment_text, reply_markup=buttons)
         else:
-            await update.reply_text(payment_text + "\n\n⚠️ QR code missing, contact support", reply_markup=buttons)
+            await update.reply_text(payment_text, reply_markup=buttons)
 
 
 @Client.on_callback_query(filters.regex("paid"))
 async def paid_handler(client: Client, callback_query: CallbackQuery):
-    """Ask for payment screenshot"""
+    """Ask for payment screenshot - No QR code shown"""
     text = (
-        "**📸 Please send your payment screenshot**\n\n"
-        "1. Take a screenshot of your payment confirmation\n"
-        "2. Send it here\n"
-        "3. We'll verify and send your PDF immediately\n\n"
-        "**Note:** Make sure transaction ID is visible"
+        "**📸 Send Payment Screenshot**\n\n"
+        "Please send your payment confirmation screenshot.\n\n"
+        "**Make sure:**\n"
+        "• Transaction ID is visible\n"
+        "• Amount ₹199 is shown\n"
+        "• Screenshot is clear"
     )
     
     # Set user in waiting for screenshot state
@@ -100,15 +100,25 @@ async def paid_handler(client: Client, callback_query: CallbackQuery):
     payment_requests[user_id] = {
         "username": callback_query.from_user.username,
         "first_name": callback_query.from_user.first_name,
-        "status": "waiting_screenshot"
+        "status": "waiting_screenshot",
+        "pending_message_id": callback_query.message.id  # Store message to delete later
     }
     
+    # Delete the previous payment message
+    try:
+        await callback_query.message.delete()
+    except:
+        pass
+    
     buttons = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔙 Cancel", callback_data="pay")]
+        [InlineKeyboardButton("🔙 Back", callback_data="pay")]
     ])
     
-    await callback_query.message.edit_text(text, reply_markup=buttons)
-    await callback_query.answer("Please send your payment screenshot now")
+    # Send new message asking for screenshot
+    new_message = await callback_query.message.reply_text(text, reply_markup=buttons)
+    payment_requests[user_id]["screenshot_request_id"] = new_message.id
+    
+    await callback_query.answer("Please send your payment screenshot")
 
 
 @Client.on_message(filters.private & (filters.photo | filters.document))
@@ -120,25 +130,36 @@ async def handle_screenshot(client: Client, message: Message):
     if user_id not in payment_requests or payment_requests[user_id]["status"] != "waiting_screenshot":
         return
     
+    # Delete the screenshot request message
+    try:
+        await client.delete_messages(
+            message.chat.id, 
+            payment_requests[user_id]["screenshot_request_id"]
+        )
+    except:
+        pass
+    
     # Update status
     payment_requests[user_id]["status"] = "pending_approval"
     payment_requests[user_id]["screenshot_message_id"] = message.id
     
-    # Notify user
-    await message.reply_text(
-        "✅ **Screenshot received!**\n\n"
-        "We're verifying your payment. You'll get the PDF within 5-10 minutes.\n\n"
-        "Status: ⏳ Pending Approval"
+    # Clean confirmation message
+    confirm_msg = await message.reply_text(
+        "✅ **Screenshot Received**\n\n"
+        "We're verifying your payment.\n"
+        "You'll get access in 5-10 minutes.\n\n"
+        "Status: ⏳ **Pending Approval**"
     )
+    
+    payment_requests[user_id]["pending_message_id"] = confirm_msg.id
     
     # Send to log channel for approval
     log_text = (
-        "**🔄 New Payment Verification Request**\n\n"
+        "**🔄 Payment Verification**\n\n"
         f"**User:** {message.from_user.mention}\n"
-        f"**User ID:** `{user_id}`\n"
-        f"**Username:** @{message.from_user.username}\n"
-        f"**Name:** {message.from_user.first_name}\n\n"
-        "**Action Required:** Verify payment and approve/reject"
+        f"**ID:** `{user_id}`\n"
+        f"**Username:** @{message.from_user.username}\n\n"
+        "**Action:** Verify and click below"
     )
     
     approve_buttons = InlineKeyboardMarkup([
@@ -150,24 +171,26 @@ async def handle_screenshot(client: Client, message: Message):
     
     # Forward screenshot to log channel
     if message.photo:
-        await client.send_photo(
+        log_msg = await client.send_photo(
             LOG_CHANNEL,
             message.photo.file_id,
             caption=log_text,
             reply_markup=approve_buttons
         )
     else:
-        await client.send_document(
+        log_msg = await client.send_document(
             LOG_CHANNEL,
             message.document.file_id,
             caption=log_text,
             reply_markup=approve_buttons
         )
+    
+    payment_requests[user_id]["log_message_id"] = log_msg.id
 
 
 @Client.on_callback_query(filters.regex(r"approve_(\d+)"))
 async def approve_payment(client: Client, callback_query: CallbackQuery):
-    """Admin approves payment - forwards the PDF post to user"""
+    """Admin approves payment - copy PDF without forward tag"""
     user_id = int(callback_query.matches[0].group(1))
     
     if user_id not in payment_requests:
@@ -175,23 +198,29 @@ async def approve_payment(client: Client, callback_query: CallbackQuery):
         return
     
     try:
-        # Forward the PDF post to user (message 210 from chat 2835704997)
-        await client.forward_messages(
+        # Delete user's pending message
+        try:
+            await client.delete_messages(
+                user_id, 
+                payment_requests[user_id]["pending_message_id"]
+            )
+        except:
+            pass
+        
+        # Copy the PDF post (no forward tag)
+        await client.copy_message(
             chat_id=user_id,
-            from_chat_id=-1002835704997,  # Convert to supergroup format
-            message_ids=210
+            from_chat_id=-1002835704997,  # Your channel
+            message_id=210  # Your PDF post
         )
         
-        # Send confirmation message
+        # Clean success message
         success_text = (
-            "**🎉 Payment Verified! Thank you for your purchase!**\n\n"
-            "**📦 Your 150k+ Reels Bundle has been sent!**\n\n"
-            "**What's Next:**\n"
-            "• Check the PDF above for download links\n"
-            "• Save the PDF for future reference\n"
-            "• Start creating amazing content! 🎬\n\n"
-            "Need help? Contact @alphaeditorssquad\n\n"
-            "**Happy Creating! 💫**"
+            "**🎉 Payment Verified!**\n\n"
+            "**Your Reels Bundle is ready!** 🎬\n\n"
+            "Check the PDF above for download links.\n"
+            "Start creating amazing content!\n\n"
+            "Need help? Contact @alphaeditorssquad"
         )
         
         await client.send_message(user_id, success_text)
@@ -200,24 +229,23 @@ async def approve_payment(client: Client, callback_query: CallbackQuery):
         payment_requests[user_id]["status"] = "approved"
         
         # Update log message
-        admin_name = callback_query.from_user.first_name
         await callback_query.message.edit_caption(
-            f"✅ **APPROVED**\n\n{callback_query.message.caption}\n\n"
-            f"**Status:** Approved by {admin_name}\n"
-            f"**Time:** {callback_query.message.date}\n"
-            f"**PDF Sent:** ✅ Yes"
+            f"✅ **APPROVED**\n\n"
+            f"User: {payment_requests[user_id]['first_name']}\n"
+            f"ID: `{user_id}`\n"
+            f"By: {callback_query.from_user.first_name}\n"
+            f"PDF: ✅ Sent"
         )
         
-        await callback_query.answer("Payment approved! PDF forwarded to user.")
+        await callback_query.answer("Approved! User got PDF")
         
     except Exception as e:
-        error_msg = f"Error forwarding PDF: {str(e)}"
-        await callback_query.answer(error_msg, show_alert=True)
+        await callback_query.answer(f"Error: {str(e)}", show_alert=True)
 
 
 @Client.on_callback_query(filters.regex(r"reject_(\d+)"))
 async def reject_payment(client: Client, callback_query: CallbackQuery):
-    """Admin rejects payment - asks user to send screenshot again"""
+    """Admin rejects payment - clean rejection"""
     user_id = int(callback_query.matches[0].group(1))
     
     if user_id not in payment_requests:
@@ -225,26 +253,31 @@ async def reject_payment(client: Client, callback_query: CallbackQuery):
         return
     
     try:
-        # Reset user status so they can send screenshot again
-        payment_requests[user_id]["status"] = "waiting_screenshot"
+        # Delete user's pending message
+        try:
+            await client.delete_messages(
+                user_id, 
+                payment_requests[user_id]["pending_message_id"]
+            )
+        except:
+            pass
         
-        # Notify user with specific rejection reason
+        # Reset user status
+        payment_requests[user_id]["status"] = "rejected"
+        
+        # Clean rejection message
         rejection_text = (
-            "**❌ Payment Verification Failed**\n\n"
-            "We couldn't verify your payment. Possible issues:\n\n"
-            "• **Screenshot is blurry/unclear** 📸\n"
-            "• **Transaction ID not visible** 🔍\n"
-            "• **Wrong amount paid** 💰\n"
-            "• **Payment not received** ⚠️\n\n"
-            "**Please send a clear payment screenshot again:**\n"
-            "1. Make sure transaction ID is visible\n"
-            "2. Ensure amount ₹199 is shown\n"
-            "3. Take a clear, full-screen screenshot\n\n"
-            "If problem continues, contact @alphaeditorssquad"
+            "**❌ Payment Not Verified**\n\n"
+            "We couldn't verify your payment.\n\n"
+            "**Please check:**\n"
+            "• Screenshot is clear\n"
+            "• Transaction ID visible\n"
+            "• Amount is ₹199\n\n"
+            "Click below to try again:"
         )
         
         retry_button = InlineKeyboardMarkup([
-            [InlineKeyboardButton("📸 Send Screenshot Again", callback_data="paid")],
+            [InlineKeyboardButton("🔄 Try Again", callback_data="paid")],
             [InlineKeyboardButton("📞 Contact Support", url="https://t.me/alphaeditorssquad")]
         ])
         
@@ -255,15 +288,15 @@ async def reject_payment(client: Client, callback_query: CallbackQuery):
         )
         
         # Update log message
-        admin_name = callback_query.from_user.first_name
         await callback_query.message.edit_caption(
-            f"❌ **REJECTED**\n\n{callback_query.message.caption}\n\n"
-            f"**Status:** Rejected by {admin_name}\n"
-            f"**Time:** {callback_query.message.date}\n"
-            f"**Action:** User asked to resend screenshot"
+            f"❌ **REJECTED**\n\n"
+            f"User: {payment_requests[user_id]['first_name']}\n"
+            f"ID: `{user_id}`\n"
+            f"By: {callback_query.from_user.first_name}\n"
+            f"Status: User asked to retry"
         )
         
-        await callback_query.answer("Payment rejected! User notified to resend screenshot.")
+        await callback_query.answer("Rejected! User notified")
         
     except Exception as e:
         await callback_query.answer(f"Error: {str(e)}", show_alert=True)
@@ -271,18 +304,18 @@ async def reject_payment(client: Client, callback_query: CallbackQuery):
 
 @Client.on_callback_query(filters.regex("help"))
 async def help_handler(client: Client, callback_query: CallbackQuery):
-    """Simple help"""
+    """Clean help message"""
     text = (
-        "**How to Get Started:**\n\n"
-        "1. Click **'Buy Now'**\n"
-        "2. Pay **₹199** via QR code\n"
-        "3. Send payment screenshot\n"
-        "4. Get instant access after verification\n\n"
-        "That's it! Simple and fast. 🚀"
+        "**How It Works:**\n\n"
+        "1. **Buy Now** - Click to start\n"
+        "2. **Pay ₹199** - UPI/Bank Transfer\n"
+        "3. **Send Screenshot** - Payment proof\n"
+        "4. **Get Access** - Instant delivery\n\n"
+        "Simple & Fast! 🚀"
     )
     
     buttons = InlineKeyboardMarkup([
-        [InlineKeyboardButton("💳 Buy Now - ₹199", callback_data="pay")],
+        [InlineKeyboardButton("💳 Buy Now", callback_data="pay")],
         [InlineKeyboardButton("🔙 Back", callback_data="back")]
     ])
     
@@ -298,7 +331,7 @@ async def back_handler(client: Client, callback_query: CallbackQuery):
 @Client.on_message(filters.command("id"))
 async def id_command(client: Client, message: Message):
     chat_title = message.chat.title or message.from_user.full_name
-    id_text = f"**Chat ID of {chat_title}:**\n`{message.chat.id}`"
+    id_text = f"**Chat ID:** `{message.chat.id}`"
     await message.reply_text(id_text)
 
 
