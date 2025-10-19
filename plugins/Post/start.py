@@ -54,14 +54,15 @@ async def pay_callback(client: Client, callback_query: CallbackQuery):
 
 
 async def send_payment(client, update):
-    """Clean payment message"""
+    """Show QR code and payment instructions"""
     payment_text = (
         "**💳 Get Your Reels Bundle**\n\n"
         "**Price:** ₹199\n\n"
-        "**Steps:**\n"
-        "1. Click **'I Paid'** below\n"
-        "2. Send payment screenshot\n"
-        "3. Get instant access\n\n"
+        "**To Pay:**\n"
+        "1. Scan the QR code below\n"
+        "2. Pay ₹199\n"
+        "3. Click **'I Paid'**\n"
+        "4. Send payment screenshot\n\n"
         "Need help? Contact @alphaeditorssquad"
     )
     
@@ -71,16 +72,20 @@ async def send_payment(client, update):
         [InlineKeyboardButton("🔙 Back", callback_data="back")]
     ])
     
+    # Show QR code image
     try:
         if isinstance(update, CallbackQuery):
-            await update.message.edit_text(payment_text, reply_markup=buttons)
+            await update.message.delete()
+            await update.message.reply_photo("payment.jpg", caption=payment_text, reply_markup=buttons)
         else:
-            await update.reply_text(payment_text, reply_markup=buttons)
-    except:
+            await update.reply_photo("payment.jpg", caption=payment_text, reply_markup=buttons)
+    except Exception as e:
+        # If QR code image is not found
+        error_text = payment_text + "\n\n⚠️ **QR Code not available. Please contact @alphaeditorssquad for payment details.**"
         if isinstance(update, CallbackQuery):
-            await update.message.edit_text(payment_text, reply_markup=buttons)
+            await update.message.edit_text(error_text, reply_markup=buttons)
         else:
-            await update.reply_text(payment_text, reply_markup=buttons)
+            await update.reply_text(error_text, reply_markup=buttons)
 
 
 @Client.on_callback_query(filters.regex("paid"))
@@ -104,7 +109,7 @@ async def paid_handler(client: Client, callback_query: CallbackQuery):
         "pending_message_id": callback_query.message.id  # Store message to delete later
     }
     
-    # Delete the previous payment message
+    # Delete the previous payment message (with QR code)
     try:
         await callback_query.message.delete()
     except:
@@ -114,7 +119,7 @@ async def paid_handler(client: Client, callback_query: CallbackQuery):
         [InlineKeyboardButton("🔙 Back", callback_data="pay")]
     ])
     
-    # Send new message asking for screenshot
+    # Send new message asking for screenshot (NO QR CODE)
     new_message = await callback_query.message.reply_text(text, reply_markup=buttons)
     payment_requests[user_id]["screenshot_request_id"] = new_message.id
     
@@ -308,7 +313,7 @@ async def help_handler(client: Client, callback_query: CallbackQuery):
     text = (
         "**How It Works:**\n\n"
         "1. **Buy Now** - Click to start\n"
-        "2. **Pay ₹199** - UPI/Bank Transfer\n"
+        "2. **Pay ₹199** - Scan QR code\n"
         "3. **Send Screenshot** - Payment proof\n"
         "4. **Get Access** - Instant delivery\n\n"
         "Simple & Fast! 🚀"
