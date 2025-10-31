@@ -192,6 +192,7 @@ async def get_countdown_message(days_left):
         f"**📅 Exam Date:** 30th April 2026\n"
         f"**⏳ Days Left:** {days_left} days\n\n"
         f"**💡 Motivation:**\n{random.choice(quotes)}\n\n"
+        f"**Last updated:** {datetime.now(IST).strftime('%d %b %Y, %I:%M %p')}"
     )
     
     return countdown_text
