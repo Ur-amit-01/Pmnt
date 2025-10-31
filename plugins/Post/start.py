@@ -39,9 +39,8 @@ async def start(client, message: Message):
     )
     
     button = InlineKeyboardMarkup([
-        [InlineKeyboardButton('📚 Add to Group', url=f'https://t.me/{BOT_USERNAME}?startgroup=true')],
-        [InlineKeyboardButton('ℹ️ Help', callback_data='help')],
-        [InlineKeyboardButton('👥 Support Group', url='https://t.me/neetaspirants2026')]
+        [InlineKeyboardButton('📚 Add to Group', url=f'https://t.me/{BOT_USERNAME}?startgroup=true'),
+        InlineKeyboardButton('ℹ️ Help', callback_data='help')]
     ])
 
     if START_PIC:
@@ -56,12 +55,6 @@ async def days_command(client: Client, message: Message):
     days_left = await get_days_left()
     
     countdown_text = await get_countdown_message(days_left)
-    
-    buttons = InlineKeyboardMarkup([
-        [InlineKeyboardButton('🔄 Refresh', callback_data='refresh_days')],
-        [InlineKeyboardButton('📊 Study Planner', callback_data='study_planner')],
-        [InlineKeyboardButton('ℹ️ Bot Info', url=f'https://t.me/{BOT_USERNAME}?start=help')]
-    ])
     
     # Try to edit existing countdown message if exists
     chat_id = message.chat.id
@@ -90,56 +83,6 @@ async def days_command(client: Client, message: Message):
     await message.delete()
 
 
-@Client.on_callback_query(filters.regex("refresh_days"))
-async def refresh_days(client: Client, callback_query: CallbackQuery):
-    """Refresh days countdown"""
-    days_left = await get_days_left()
-    countdown_text = await get_countdown_message(days_left)
-    
-    buttons = InlineKeyboardMarkup([
-        [InlineKeyboardButton('🔄 Refresh', callback_data='refresh_days')],
-        [InlineKeyboardButton('📊 Study Planner', callback_data='study_planner')],
-        [InlineKeyboardButton('ℹ️ Bot Info', url=f'https://t.me/{BOT_USERNAME}?start=help')]
-    ])
-    
-    try:
-        await callback_query.message.edit_text(countdown_text, reply_markup=buttons)
-        await callback_query.answer("Countdown updated! ✅")
-    except:
-        await callback_query.answer("Error updating countdown", show_alert=True)
-
-
-@Client.on_callback_query(filters.regex("study_planner"))
-async def study_planner(client: Client, callback_query: CallbackQuery):
-    """Show study planner"""
-    days_left = await get_days_left()
-    
-    planner_text = (
-        "**📚 NEET 2026 Study Planner**\n\n"
-        f"**Time Left:** {days_left} days\n"
-        f"**Target Date:** 30th April 2026\n\n"
-        "**Daily Study Plan:**\n"
-        "• 2-3 hours Physics\n"
-        "• 2-3 hours Chemistry\n"
-        "• 3-4 hours Biology\n"
-        "• 1 hour Revision\n\n"
-        "**Weekly Targets:**\n"
-        "• Complete 2 chapters each subject\n"
-        "• Solve 500+ MCQs\n"
-        "• 2 full mock tests\n\n"
-        "**Stay Consistent! 💪**"
-    )
-    
-    buttons = InlineKeyboardMarkup([
-        [InlineKeyboardButton('⏰ Back to Countdown', callback_data='refresh_days')],
-        [InlineKeyboardButton('📖 Study Materials', url='https://t.me/neetmaterials')],
-        [InlineKeyboardButton('✅ Mock Tests', url='https://t.me/neetmocks')]
-    ])
-    
-    await callback_query.message.edit_text(planner_text, reply_markup=buttons)
-    await callback_query.answer("Study Planner 📚")
-
-
 @Client.on_callback_query(filters.regex("help"))
 async def help_handler(client: Client, callback_query: CallbackQuery):
     """Show help message"""
@@ -149,7 +92,6 @@ async def help_handler(client: Client, callback_query: CallbackQuery):
         "• /start - Start the bot\n"
         "• /days - Show days left for NEET\n"
         "• /auto - Enable auto countdown (Admins)\n"
-        "• /stats - Bot statistics\n\n"
         "**Features:**\n"
         "• Daily countdown updates\n"
         "• Study planner\n"
@@ -160,7 +102,6 @@ async def help_handler(client: Client, callback_query: CallbackQuery):
     
     buttons = InlineKeyboardMarkup([
         [InlineKeyboardButton('📚 Add to Group', url=f'https://t.me/{BOT_USERNAME}?startgroup=true')],
-        [InlineKeyboardButton('👥 Support', url='https://t.me/neetaspirants2026')],
         [InlineKeyboardButton('🔙 Back', callback_data='back_start')]
     ])
     
@@ -243,19 +184,12 @@ async def get_countdown_message(days_left):
         "**The pain of studying is temporary, but the pride of success is permanent!** 🎯"
     ]
     
-    # Progress bar (simplified)
-    total_days = (NEET_DATE - datetime(2024, 1, 1)).days
-    progress = min(100, int((total_days - days_left) / total_days * 100))
-    progress_bar = "█" * (progress // 10) + "░" * (10 - progress // 10)
     
     countdown_text = (
         f"**⏰ NEET 2026 COUNTDOWN**\n\n"
         f"**📅 Exam Date:** 30th April 2026\n"
         f"**⏳ Days Left:** {days_left} days\n\n"
-        f"**📊 Progress:** {progress}%\n"
-        f"`[{progress_bar}]`\n\n"
         f"**💡 Motivation:**\n{random.choice(quotes)}\n\n"
-        f"**Last updated:** {datetime.now().strftime('%d %b %Y, %I:%M %p')}"
     )
     
     return countdown_text
@@ -272,10 +206,6 @@ async def send_daily_countdown(client: Client):
                 days_left = await get_days_left()
                 countdown_text = await get_countdown_message(days_left)
                 
-                buttons = InlineKeyboardMarkup([
-                    [InlineKeyboardButton('🔄 Refresh', callback_data='refresh_days')],
-                    [InlineKeyboardButton('📊 Study Planner', callback_data='study_planner')]
-                ])
                 
                 for chat_id, settings in group_settings.items():
                     if settings.get('auto_countdown', False):
