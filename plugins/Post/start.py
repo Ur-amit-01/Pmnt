@@ -1,11 +1,17 @@
 from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, Message, BotCommand
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, BotCommand
 from config import *
 from plugins.helper.db import db
+import asyncio
+from datetime import datetime, timedelta
 import random
 
-# Store payment requests temporarily
-payment_requests = {}
+# NEET Exam Date - 30th April 2026
+NEET_DATE = datetime(2026, 4, 30)
+BOT_USERNAME = "Neet_countdown_robot"  # Change this to your bot's username
+
+# Store group settings
+group_settings = {}
 
 # =====================================================================================
 
@@ -22,19 +28,20 @@ async def start(client, message: Message):
         total_users = await db.total_users_count()
         await client.send_message(LOG_CHANNEL, LOG_TEXT.format(message.from_user.mention, message.from_user.id, total_users))
 
-    # Clean welcome message
     txt = (
         f"👋 **Hey {message.from_user.mention}!**\n\n"
-        "**150k+ Premium Reels Bundle** 🎬\n\n"
-        "• All Categories Included\n"
-        "• Instant Delivery\n"
-        "• Only ₹199\n\n"
-        "Click **Buy Now** to get started!"
+        "**I'm NEET 2026 Countdown Bot** ⏰\n\n"
+        "• Track days left for NEET 2026\n"
+        "• Automatic daily countdown updates\n"
+        "• Motivational messages\n"
+        "• Study reminders\n\n"
+        "**Add me to your group** and use /days to start the countdown!"
     )
     
     button = InlineKeyboardMarkup([
-        [InlineKeyboardButton('💳 Buy Now - ₹199', callback_data='pay')],
-        [InlineKeyboardButton('❓ Help', callback_data='help')]
+        [InlineKeyboardButton('📚 Add to Group', url=f'https://t.me/{BOT_USERNAME}?startgroup=true')],
+        [InlineKeyboardButton('ℹ️ Help', callback_data='help')],
+        [InlineKeyboardButton('👥 Support Group', url='https://t.me/neetaspirants2026')]
     ])
 
     if START_PIC:
@@ -43,310 +50,298 @@ async def start(client, message: Message):
         await message.reply_text(text=txt, reply_markup=button)
 
 
-@Client.on_message(filters.private & filters.command("pay"))
-async def pay_command(client: Client, message: Message):
-    await send_payment(client, message)
+@Client.on_message(filters.group & filters.command("days"))
+async def days_command(client: Client, message: Message):
+    """Show days left for NEET 2026"""
+    days_left = await get_days_left()
+    
+    countdown_text = await get_countdown_message(days_left)
+    
+    buttons = InlineKeyboardMarkup([
+        [InlineKeyboardButton('🔄 Refresh', callback_data='refresh_days')],
+        [InlineKeyboardButton('📊 Study Planner', callback_data='study_planner')],
+        [InlineKeyboardButton('ℹ️ Bot Info', url=f'https://t.me/{BOT_USERNAME}?start=help')]
+    ])
+    
+    # Try to edit existing countdown message if exists
+    chat_id = message.chat.id
+    if chat_id in group_settings and 'countdown_msg_id' in group_settings[chat_id]:
+        try:
+            await client.edit_message_text(
+                chat_id=chat_id,
+                message_id=group_settings[chat_id]['countdown_msg_id'],
+                text=countdown_text,
+                reply_markup=buttons
+            )
+            await message.delete()
+            return
+        except:
+            pass
+    
+    # Send new countdown message
+    countdown_msg = await message.reply_text(countdown_text, reply_markup=buttons)
+    
+    # Store message ID for future updates
+    if chat_id not in group_settings:
+        group_settings[chat_id] = {}
+    group_settings[chat_id]['countdown_msg_id'] = countdown_msg.id
+    group_settings[chat_id]['last_update'] = datetime.now()
+    
+    await message.delete()
 
 
-@Client.on_callback_query(filters.regex("pay"))
-async def pay_callback(client: Client, callback_query: CallbackQuery):
-    await send_payment(client, callback_query)
+@Client.on_callback_query(filters.regex("refresh_days"))
+async def refresh_days(client: Client, callback_query: CallbackQuery):
+    """Refresh days countdown"""
+    days_left = await get_days_left()
+    countdown_text = await get_countdown_message(days_left)
+    
+    buttons = InlineKeyboardMarkup([
+        [InlineKeyboardButton('🔄 Refresh', callback_data='refresh_days')],
+        [InlineKeyboardButton('📊 Study Planner', callback_data='study_planner')],
+        [InlineKeyboardButton('ℹ️ Bot Info', url=f'https://t.me/{BOT_USERNAME}?start=help')]
+    ])
+    
+    try:
+        await callback_query.message.edit_text(countdown_text, reply_markup=buttons)
+        await callback_query.answer("Countdown updated! ✅")
+    except:
+        await callback_query.answer("Error updating countdown", show_alert=True)
 
 
-async def send_payment(client, update):
-    """Show QR code and payment instructions"""
-    payment_text = (
-        "**💳 Get Your Reels Bundle**\n\n"
-        "**Price:** ₹199\n\n"
-        "**To Pay:**\n"
-        "1. Scan the QR code below\n"
-        "2. Pay ₹199\n"
-        "3. Click **'I Paid'**\n"
-        "4. Send payment screenshot\n\n"
-        "Need help? Contact @alphaeditorssquad"
+@Client.on_callback_query(filters.regex("study_planner"))
+async def study_planner(client: Client, callback_query: CallbackQuery):
+    """Show study planner"""
+    days_left = await get_days_left()
+    
+    planner_text = (
+        "**📚 NEET 2026 Study Planner**\n\n"
+        f"**Time Left:** {days_left} days\n"
+        f"**Target Date:** 30th April 2026\n\n"
+        "**Daily Study Plan:**\n"
+        "• 2-3 hours Physics\n"
+        "• 2-3 hours Chemistry\n"
+        "• 3-4 hours Biology\n"
+        "• 1 hour Revision\n\n"
+        "**Weekly Targets:**\n"
+        "• Complete 2 chapters each subject\n"
+        "• Solve 500+ MCQs\n"
+        "• 2 full mock tests\n\n"
+        "**Stay Consistent! 💪**"
     )
     
     buttons = InlineKeyboardMarkup([
-        [InlineKeyboardButton("✅ I Paid", callback_data="paid")],
-        [InlineKeyboardButton("❓ Help", callback_data="help")],
-        [InlineKeyboardButton("🔙 Back", callback_data="back")]
+        [InlineKeyboardButton('⏰ Back to Countdown', callback_data='refresh_days')],
+        [InlineKeyboardButton('📖 Study Materials', url='https://t.me/neetmaterials')],
+        [InlineKeyboardButton('✅ Mock Tests', url='https://t.me/neetmocks')]
     ])
     
-    # Show QR code image
-    try:
-        if isinstance(update, CallbackQuery):
-            await update.message.delete()
-            await update.message.reply_photo("payment.jpg", caption=payment_text, reply_markup=buttons)
-        else:
-            await update.reply_photo("payment.jpg", caption=payment_text, reply_markup=buttons)
-    except Exception as e:
-        # If QR code image is not found
-        error_text = payment_text + "\n\n⚠️ **QR Code not available. Please contact @alphaeditorssquad for payment details.**"
-        if isinstance(update, CallbackQuery):
-            await update.message.edit_text(error_text, reply_markup=buttons)
-        else:
-            await update.reply_text(error_text, reply_markup=buttons)
-
-
-@Client.on_callback_query(filters.regex("paid"))
-async def paid_handler(client: Client, callback_query: CallbackQuery):
-    """Ask for payment screenshot - No QR code shown"""
-    text = (
-        "**📸 Send Payment Screenshot**\n\n"
-        "Please send your payment confirmation screenshot.\n\n"
-        "**Make sure:**\n"
-        "• Transaction ID is visible\n"
-        "• Amount ₹199 is shown\n"
-        "• Screenshot is clear"
-    )
-    
-    # Set user in waiting for screenshot state
-    user_id = callback_query.from_user.id
-    payment_requests[user_id] = {
-        "username": callback_query.from_user.username,
-        "first_name": callback_query.from_user.first_name,
-        "status": "waiting_screenshot",
-        "pending_message_id": callback_query.message.id  # Store message to delete later
-    }
-    
-    # Delete the previous payment message (with QR code)
-    try:
-        await callback_query.message.delete()
-    except:
-        pass
-    
-    buttons = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔙 Back", callback_data="pay")]
-    ])
-    
-    # Send new message asking for screenshot (NO QR CODE)
-    new_message = await callback_query.message.reply_text(text, reply_markup=buttons)
-    payment_requests[user_id]["screenshot_request_id"] = new_message.id
-    
-    await callback_query.answer("Please send your payment screenshot")
-
-
-@Client.on_message(filters.private & (filters.photo | filters.document))
-async def handle_screenshot(client: Client, message: Message):
-    """Handle payment screenshot"""
-    user_id = message.from_user.id
-    
-    # Check if user is waiting to send screenshot
-    if user_id not in payment_requests or payment_requests[user_id]["status"] != "waiting_screenshot":
-        return
-    
-    # Delete the screenshot request message
-    try:
-        await client.delete_messages(
-            message.chat.id, 
-            payment_requests[user_id]["screenshot_request_id"]
-        )
-    except:
-        pass
-    
-    # Update status
-    payment_requests[user_id]["status"] = "pending_approval"
-    payment_requests[user_id]["screenshot_message_id"] = message.id
-    
-    # Clean confirmation message
-    confirm_msg = await message.reply_text(
-        "✅ **Screenshot Received**\n\n"
-        "We're verifying your payment.\n"
-        "You'll get access in 5-10 minutes.\n\n"
-        "Status: ⏳ **Pending Approval**"
-    )
-    
-    payment_requests[user_id]["pending_message_id"] = confirm_msg.id
-    
-    # Send to log channel for approval
-    log_text = (
-        "**🔄 Payment Verification**\n\n"
-        f"**User:** {message.from_user.mention}\n"
-        f"**ID:** `{user_id}`\n"
-        f"**Username:** @{message.from_user.username}\n\n"
-        "**Action:** Verify and click below"
-    )
-    
-    approve_buttons = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("✅ Approve", callback_data=f"approve_{user_id}"),
-            InlineKeyboardButton("❌ Reject", callback_data=f"reject_{user_id}")
-        ]
-    ])
-    
-    # Forward screenshot to log channel
-    if message.photo:
-        log_msg = await client.send_photo(
-            LOG_CHANNEL,
-            message.photo.file_id,
-            caption=log_text,
-            reply_markup=approve_buttons
-        )
-    else:
-        log_msg = await client.send_document(
-            LOG_CHANNEL,
-            message.document.file_id,
-            caption=log_text,
-            reply_markup=approve_buttons
-        )
-    
-    payment_requests[user_id]["log_message_id"] = log_msg.id
-
-
-@Client.on_callback_query(filters.regex(r"approve_(\d+)"))
-async def approve_payment(client: Client, callback_query: CallbackQuery):
-    """Admin approves payment - copy PDF without forward tag"""
-    user_id = int(callback_query.matches[0].group(1))
-    
-    if user_id not in payment_requests:
-        await callback_query.answer("User not found", show_alert=True)
-        return
-    
-    try:
-        # Delete user's pending message
-        try:
-            await client.delete_messages(
-                user_id, 
-                payment_requests[user_id]["pending_message_id"]
-            )
-        except:
-            pass
-        
-        # Copy the PDF post (no forward tag)
-        await client.copy_message(
-            chat_id=user_id,
-            from_chat_id=-1002835704997,  # Your channel
-            message_id=210  # Your PDF post
-        )
-        
-        # Clean success message
-        success_text = (
-            "**🎉 Payment Verified!**\n\n"
-            "**Your Reels Bundle is ready!** 🎬\n\n"
-            "Check the PDF above for download links.\n"
-            "Start creating amazing content!\n\n"
-            "Need help? Contact @alphaeditorssquad"
-        )
-        
-        await client.send_message(user_id, success_text)
-        
-        # Update status
-        payment_requests[user_id]["status"] = "approved"
-        
-        # Update log message
-        await callback_query.message.edit_caption(
-            f"✅ **APPROVED**\n\n"
-            f"User: {payment_requests[user_id]['first_name']}\n"
-            f"ID: `{user_id}`\n"
-            f"By: {callback_query.from_user.first_name}\n"
-            f"PDF: ✅ Sent"
-        )
-        
-        await callback_query.answer("Approved! User got PDF")
-        
-    except Exception as e:
-        await callback_query.answer(f"Error: {str(e)}", show_alert=True)
-
-
-@Client.on_callback_query(filters.regex(r"reject_(\d+)"))
-async def reject_payment(client: Client, callback_query: CallbackQuery):
-    """Admin rejects payment - clean rejection"""
-    user_id = int(callback_query.matches[0].group(1))
-    
-    if user_id not in payment_requests:
-        await callback_query.answer("User not found", show_alert=True)
-        return
-    
-    try:
-        # Delete user's pending message
-        try:
-            await client.delete_messages(
-                user_id, 
-                payment_requests[user_id]["pending_message_id"]
-            )
-        except:
-            pass
-        
-        # Reset user status
-        payment_requests[user_id]["status"] = "rejected"
-        
-        # Clean rejection message
-        rejection_text = (
-            "**❌ Payment Not Verified**\n\n"
-            "We couldn't verify your payment.\n\n"
-            "**Please check:**\n"
-            "• Screenshot is clear\n"
-            "• Transaction ID visible\n"
-            "• Amount is ₹199\n\n"
-            "Click below to try again:"
-        )
-        
-        retry_button = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔄 Try Again", callback_data="paid")],
-            [InlineKeyboardButton("📞 Contact Support", url="https://t.me/alphaeditorssquad")]
-        ])
-        
-        await client.send_message(
-            user_id,
-            rejection_text,
-            reply_markup=retry_button
-        )
-        
-        # Update log message
-        await callback_query.message.edit_caption(
-            f"❌ **REJECTED**\n\n"
-            f"User: {payment_requests[user_id]['first_name']}\n"
-            f"ID: `{user_id}`\n"
-            f"By: {callback_query.from_user.first_name}\n"
-            f"Status: User asked to retry"
-        )
-        
-        await callback_query.answer("Rejected! User notified")
-        
-    except Exception as e:
-        await callback_query.answer(f"Error: {str(e)}", show_alert=True)
+    await callback_query.message.edit_text(planner_text, reply_markup=buttons)
+    await callback_query.answer("Study Planner 📚")
 
 
 @Client.on_callback_query(filters.regex("help"))
 async def help_handler(client: Client, callback_query: CallbackQuery):
-    """Clean help message"""
-    text = (
-        "**How It Works:**\n\n"
-        "1. **Buy Now** - Click to start\n"
-        "2. **Pay ₹199** - Scan QR code\n"
-        "3. **Send Screenshot** - Payment proof\n"
-        "4. **Get Access** - Instant delivery\n\n"
-        "Simple & Fast! 🚀"
+    """Show help message"""
+    help_text = (
+        "**NEET Countdown Bot Help** 📚\n\n"
+        "**Commands:**\n"
+        "• /start - Start the bot\n"
+        "• /days - Show days left for NEET\n"
+        "• /auto - Enable auto countdown (Admins)\n"
+        "• /stats - Bot statistics\n\n"
+        "**Features:**\n"
+        "• Daily countdown updates\n"
+        "• Study planner\n"
+        "• Motivational quotes\n"
+        "• Automatic reminders\n\n"
+        "**Add me to your NEET preparation group!**"
     )
     
     buttons = InlineKeyboardMarkup([
-        [InlineKeyboardButton("💳 Buy Now", callback_data="pay")],
-        [InlineKeyboardButton("🔙 Back", callback_data="back")]
+        [InlineKeyboardButton('📚 Add to Group', url=f'https://t.me/{BOT_USERNAME}?startgroup=true')],
+        [InlineKeyboardButton('👥 Support', url='https://t.me/neetaspirants2026')],
+        [InlineKeyboardButton('🔙 Back', callback_data='back_start')]
     ])
     
-    await callback_query.message.edit_text(text, reply_markup=buttons)
+    if callback_query.message.photo:
+        await callback_query.message.delete()
+        await callback_query.message.reply_text(help_text, reply_markup=buttons)
+    else:
+        await callback_query.message.edit_text(help_text, reply_markup=buttons)
 
 
-@Client.on_callback_query(filters.regex("back"))
-async def back_handler(client: Client, callback_query: CallbackQuery):
+@Client.on_callback_query(filters.regex("back_start"))
+async def back_start(client: Client, callback_query: CallbackQuery):
     """Go back to start"""
     await start(client, callback_query.message)
 
 
-@Client.on_message(filters.command("id"))
-async def id_command(client: Client, message: Message):
-    chat_title = message.chat.title or message.from_user.full_name
-    id_text = f"**Chat ID:** `{message.chat.id}`"
-    await message.reply_text(id_text)
+@Client.on_message(filters.group & filters.command("auto"))
+async def auto_countdown(client: Client, message: Message):
+    """Enable automatic countdown messages"""
+    # Check if user is admin
+    user = await client.get_chat_member(message.chat.id, message.from_user.id)
+    if user.status not in ["creator", "administrator"]:
+        await message.reply_text("❌ You need to be an admin to use this command.")
+        return
+    
+    chat_id = message.chat.id
+    
+    if chat_id not in group_settings:
+        group_settings[chat_id] = {}
+    
+    # Toggle auto countdown
+    group_settings[chat_id]['auto_countdown'] = not group_settings[chat_id].get('auto_countdown', False)
+    
+    status = "enabled" if group_settings[chat_id]['auto_countdown'] else "disabled"
+    
+    await message.reply_text(
+        f"✅ **Automatic countdown {status}!**\n\n"
+        f"I will now {'start' if group_settings[chat_id]['auto_countdown'] else 'stop'} sending "
+        f"daily countdown updates at 8:00 AM.\n\n"
+        "Use /days to manually check countdown."
+    )
+
+
+@Client.on_message(filters.command("stats"))
+async def stats_command(client: Client, message: Message):
+    """Show bot statistics"""
+    total_users = await db.total_users_count()
+    total_groups = len(group_settings)
+    
+    days_left = await get_days_left()
+    
+    stats_text = (
+        "**📊 NEET Countdown Bot Stats**\n\n"
+        f"**👥 Total Users:** {total_users}\n"
+        f"**👥 Groups Using:** {total_groups}\n"
+        f"**⏰ Days Left:** {days_left} days\n"
+        f"**🎯 Exam Date:** 30th April 2026\n\n"
+        "**Keep Studying! 💪**"
+    )
+    
+    await message.reply_text(stats_text)
+
+
+async def get_days_left():
+    """Calculate days left until NEET 2026"""
+    today = datetime.now().date()
+    neet_date = NEET_DATE.date()
+    delta = neet_date - today
+    return delta.days
+
+
+async def get_countdown_message(days_left):
+    """Generate countdown message with motivational quote"""
+    quotes = [
+        "**Every hour you study today is an hour closer to your dream college!** 🏥",
+        "**Consistency is the key to cracking NEET!** 🔑",
+        "**Your future self will thank you for studying today!** 🙏",
+        "**Small daily improvements lead to stunning results!** ⭐",
+        "**Don't watch the clock; do what it does. Keep going!** ⏰",
+        "**The pain of studying is temporary, but the pride of success is permanent!** 🎯"
+    ]
+    
+    # Progress bar (simplified)
+    total_days = (NEET_DATE - datetime(2024, 1, 1)).days
+    progress = min(100, int((total_days - days_left) / total_days * 100))
+    progress_bar = "█" * (progress // 10) + "░" * (10 - progress // 10)
+    
+    countdown_text = (
+        f"**⏰ NEET 2026 COUNTDOWN**\n\n"
+        f"**📅 Exam Date:** 30th April 2026\n"
+        f"**⏳ Days Left:** {days_left} days\n\n"
+        f"**📊 Progress:** {progress}%\n"
+        f"`[{progress_bar}]`\n\n"
+        f"**💡 Motivation:**\n{random.choice(quotes)}\n\n"
+        f"**Last updated:** {datetime.now().strftime('%d %b %Y, %I:%M %p')}"
+    )
+    
+    return countdown_text
+
+
+async def send_daily_countdown(client: Client):
+    """Send daily countdown to all groups with auto countdown enabled"""
+    while True:
+        try:
+            now = datetime.now()
+            
+            # Send at 8:00 AM every day
+            if now.hour == 8 and now.minute == 0:
+                days_left = await get_days_left()
+                countdown_text = await get_countdown_message(days_left)
+                
+                buttons = InlineKeyboardMarkup([
+                    [InlineKeyboardButton('🔄 Refresh', callback_data='refresh_days')],
+                    [InlineKeyboardButton('📊 Study Planner', callback_data='study_planner')]
+                ])
+                
+                for chat_id, settings in group_settings.items():
+                    if settings.get('auto_countdown', False):
+                        try:
+                            await client.send_message(
+                                chat_id=chat_id,
+                                text=countdown_text,
+                                reply_markup=buttons
+                            )
+                        except Exception as e:
+                            # Remove group from settings if bot is no longer there
+                            if "chat not found" in str(e).lower() or "kicked" in str(e).lower():
+                                del group_settings[chat_id]
+            
+            # Wait for 1 minute before checking again
+            await asyncio.sleep(60)
+            
+        except Exception as e:
+            print(f"Error in daily countdown: {e}")
+            await asyncio.sleep(60)
+
+
+@Client.on_message(filters.command("broadcast") & filters.user(ADMINS))
+async def broadcast_handler(client: Client, message: Message):
+    """Broadcast message to all users (Admin only)"""
+    if not message.reply_to_message:
+        await message.reply_text("Please reply to a message to broadcast.")
+        return
+    
+    users = await db.get_all_users()
+    success = 0
+    failed = 0
+    
+    for user in users:
+        try:
+            await message.reply_to_message.copy(user['user_id'])
+            success += 1
+        except:
+            failed += 1
+        await asyncio.sleep(0.1)  # Prevent flooding
+    
+    await message.reply_text(f"Broadcast completed!\nSuccess: {success}\nFailed: {failed}")
+
+
+# Start background task when bot starts
+@Client.on_message(filters.command("init"))
+async def init_bot(client: Client, message: Message):
+    """Initialize background tasks"""
+    asyncio.create_task(send_daily_countdown(client))
+    await message.reply_text("✅ Background tasks started!")
 
 
 # =====================================================================================
 # Set bot commands
-@Client.on_message(filters.command("set"))
+@Client.on_message(filters.command("setcommands"))
 async def set_commands(client: Client, message: Message):
     await client.set_bot_commands([
-        BotCommand("start", "Start bot"),
-        BotCommand("pay", "Buy Reels Bundle - ₹199"),
-        BotCommand("id", "Get chat ID"),
+        BotCommand("start", "Start the bot"),
+        BotCommand("days", "Check days left for NEET"),
+        BotCommand("auto", "Enable auto countdown (Admins)"),
+        BotCommand("stats", "Bot statistics"),
     ])
-    await message.reply_text("✅ Bot commands updated")
+    await message.reply_text("✅ Bot commands updated!")
+
+
+@Client.on_message(filters.command("id"))
+async def id_command(client: Client, message: Message):
+    chat_id = message.chat.id
+    await message.reply_text(f"**Chat ID:** `{chat_id}`")
