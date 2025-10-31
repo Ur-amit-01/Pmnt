@@ -1,5 +1,5 @@
 from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, BotCommand
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, BotCommand, CallbackQuery
 from config import *
 from plugins.helper.db import db
 import asyncio
