@@ -5,6 +5,8 @@ from plugins.helper.db import db
 import asyncio
 from datetime import datetime, timedelta
 import random
+import pytz  
+IST = pytz.timezone("Asia/Kolkata")
 
 # NEET Exam Date - 30th April 2026
 NEET_DATE = datetime(2026, 4, 30)
@@ -167,7 +169,7 @@ async def stats_command(client: Client, message: Message):
 
 async def get_days_left():
     """Calculate days left until NEET 2026"""
-    today = datetime.now().date()
+    today = datetime.now(IST).date()
     neet_date = NEET_DATE.date()
     delta = neet_date - today
     return delta.days
@@ -199,7 +201,7 @@ async def send_daily_countdown(client: Client):
     """Send daily countdown to all groups with auto countdown enabled"""
     while True:
         try:
-            now = datetime.now()
+            now = datetime.now(IST)
             
             # Send at 8:00 AM every day
             if now.hour == 8 and now.minute == 0:
@@ -265,8 +267,7 @@ async def set_commands(client: Client, message: Message):
     await client.set_bot_commands([
         BotCommand("start", "Start the bot"),
         BotCommand("days", "Check days left for NEET"),
-        BotCommand("auto", "Enable auto countdown (Admins)"),
-        BotCommand("stats", "Bot statistics"),
+        BotCommand("auto", "Enable auto countdown (Admins)")
     ])
     await message.reply_text("✅ Bot commands updated!")
 
