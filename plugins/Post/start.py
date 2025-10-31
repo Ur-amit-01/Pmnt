@@ -65,8 +65,7 @@ async def days_command(client: Client, message: Message):
             await client.edit_message_text(
                 chat_id=chat_id,
                 message_id=group_settings[chat_id]['countdown_msg_id'],
-                text=countdown_text,
-                reply_markup=buttons
+                text=countdown_text
             )
             await message.delete()
             return
@@ -74,7 +73,7 @@ async def days_command(client: Client, message: Message):
             pass
     
     # Send new countdown message
-    countdown_msg = await message.reply_text(countdown_text, reply_markup=buttons)
+    countdown_msg = await message.reply_text(countdown_text)
     
     # Store message ID for future updates
     if chat_id not in group_settings:
@@ -192,7 +191,7 @@ async def get_countdown_message(days_left):
         f"**📅 Exam Date:** 30th April 2026\n"
         f"**⏳ Days Left:** {days_left} days\n\n"
         f"**💡 Motivation:**\n{random.choice(quotes)}\n\n"
-        f"**Last updated:** {datetime.now(IST).strftime('%d %b %Y, %I:%M %p')}"
+        f"**🔁 Last updated:** {datetime.now(IST).strftime('%d %b %Y, %I:%M %p')}"
     )
     
     return countdown_text
