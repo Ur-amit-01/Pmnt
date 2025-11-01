@@ -157,11 +157,10 @@ async def get_countdown_message(days_left):
     
     
     countdown_text = (
-        f"**⏰ NEET 2026 COUNTDOWN**\n\n"
-        f"**📅 Exam Date:** 30th April 2026\n"
-        f"**⏳ Days Left:** {days_left} days\n\n"
-        f">**💡 Motivation:**\n"
-        f"{random.choice(quotes)}"
+        f">**⏰ NEET 2026 COUNTDOWN**\n\n"
+        f"**📅 Exam Date: 30th April 2026**\n"
+        f"**⏳ Days Left: {days_left} days left**\n\n"
+        f">**{random.choice(quotes)}**"
     )
     
     return countdown_text
