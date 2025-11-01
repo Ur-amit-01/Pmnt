@@ -51,7 +51,7 @@ async def start(client, message: Message):
         await message.reply_text(text=txt, reply_markup=button)
 
 
-@Client.on_message(filters.group & filters.command("days"))
+@Client.on_message(filters.command("days"))
 async def days_command(client: Client, message: Message):
     """Show days left for NEET 2026"""
     days_left = await get_days_left()
@@ -146,7 +146,7 @@ async def auto_countdown(client: Client, message: Message):
     )
 
 
-@Client.on_message(filters.command("stats"))
+@Client.on_message(filters.private & filters.command("stats"))
 async def stats_command(client: Client, message: Message):
     """Show bot statistics"""
     total_users = await db.total_users_count()
