@@ -34,10 +34,7 @@ async def start(client, message: Message):
         f"👋 **Hey {message.from_user.mention}!**\n\n"
         "**I'm NEET 2026 Countdown Bot** ⏰\n\n"
         "• Track days left for NEET 2026\n"
-        "• Automatic daily countdown updates\n"
         "• Motivational messages\n"
-        "• Study reminders\n\n"
-        "**Add me to your group** and use /days to start the countdown!"
     )
     
     button = InlineKeyboardMarkup([
@@ -119,33 +116,6 @@ async def back_start(client: Client, callback_query: CallbackQuery):
     await start(client, callback_query.message)
 
 
-@Client.on_message(filters.group & filters.command("auto"))
-async def auto_countdown(client: Client, message: Message):
-    """Enable automatic countdown messages"""
-    # Check if user is admin
-    user = await client.get_chat_member(message.chat.id, message.from_user.id)
-    if user.status not in ["creator", "administrator"]:
-        await message.reply_text("❌ You need to be an admin to use this command.")
-        return
-    
-    chat_id = message.chat.id
-    
-    if chat_id not in group_settings:
-        group_settings[chat_id] = {}
-    
-    # Toggle auto countdown
-    group_settings[chat_id]['auto_countdown'] = not group_settings[chat_id].get('auto_countdown', False)
-    
-    status = "enabled" if group_settings[chat_id]['auto_countdown'] else "disabled"
-    
-    await message.reply_text(
-        f"✅ **Automatic countdown {status}!**\n\n"
-        f"I will now {'start' if group_settings[chat_id]['auto_countdown'] else 'stop'} sending "
-        f"daily countdown updates at 8:00 AM.\n\n"
-        "Use /days to manually check countdown."
-    )
-
-
 @Client.on_message(filters.private & filters.command("stats"))
 async def stats_command(client: Client, message: Message):
     """Show bot statistics"""
@@ -190,45 +160,12 @@ async def get_countdown_message(days_left):
         f"**⏰ NEET 2026 COUNTDOWN**\n\n"
         f"**📅 Exam Date:** 30th April 2026\n"
         f"**⏳ Days Left:** {days_left} days\n\n"
-        f"**💡 Motivation:**\n{random.choice(quotes)}\n\n"
-        f"**🔁 Last updated:** {datetime.now(IST).strftime('%d %b %Y, %I:%M %p')}"
+        f">**💡 Motivation:**\n"
+        f"{random.choice(quotes)}"
     )
     
     return countdown_text
-
-
-async def send_daily_countdown(client: Client):
-    """Send daily countdown to all groups with auto countdown enabled"""
-    while True:
-        try:
-            now = datetime.now(IST)
-            
-            # Send at 8:00 AM every day
-            if now.hour == 8 and now.minute == 0:
-                days_left = await get_days_left()
-                countdown_text = await get_countdown_message(days_left)
-                
-                
-                for chat_id, settings in group_settings.items():
-                    if settings.get('auto_countdown', False):
-                        try:
-                            await client.send_message(
-                                chat_id=chat_id,
-                                text=countdown_text,
-                                reply_markup=buttons
-                            )
-                        except Exception as e:
-                            # Remove group from settings if bot is no longer there
-                            if "chat not found" in str(e).lower() or "kicked" in str(e).lower():
-                                del group_settings[chat_id]
-            
-            # Wait for 1 minute before checking again
-            await asyncio.sleep(60)
-            
-        except Exception as e:
-            print(f"Error in daily countdown: {e}")
-            await asyncio.sleep(60)
-
+    
 
 @Client.on_message(filters.command("broadcast") & filters.user(ADMINS))
 async def broadcast_handler(client: Client, message: Message):
